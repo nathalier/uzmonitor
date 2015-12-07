@@ -3,6 +3,7 @@ __author__ = 'Nathalie'
 from requests import Request, Response, Session
 from re import findall
 from jjdecoder import JJDecoder
+from json import loads
 
 UZ_URI_BASE = "http://booking.uz.gov.ua/"
 LANG = "en/"     # "uk/"
@@ -16,7 +17,14 @@ def parse_token(body):
     return token_decoded
 
 
-def connect_to_uz(train, tr_class, passengers):
+def needed_train(trains, needed_train):
+    for index, train in enumerate(trains):
+        if train['num'] == needed_train:
+            return index
+    return -1
+
+
+def connect_to_uz(req_date, train, tr_class, passengers):
     with Session() as s:
         r = s.get(UZ_URI_BASE + LANG)
         if r.status_code == 302:
@@ -26,10 +34,6 @@ def connect_to_uz(train, tr_class, passengers):
             return
         gv_token = parse_token(r.text)
 
-        req_params = {"station_id_from": "2200001", "station_id_till": "2218200",
-                      "station_from": "Kyiv", "station_till": "Ivano-Frankivsk",
-                      "date_dep": "12.13.2015", "time_dep": "00:00", "time_dep_till": "",
-                      "another_ec": "0", "search": ""}
         headers = {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
@@ -52,22 +56,54 @@ def connect_to_uz(train, tr_class, passengers):
             "Cache-Control": "no-cache"
          }
 
+        trains_params = {"station_id_from": "2200001", "station_id_till": "2218200",
+                      "station_from": "Kyiv", "station_till": "Ivano-Frankivsk",
+                      "date_dep": req_date, "time_dep": "00:00", "time_dep_till": "",
+                      "another_ec": "0", "search": ""}
+
         url = UZ_URI_BASE + LANG + TRAINS_SEARCH
 
-        trains_req = Request('POST', url,  data=req_params, headers=headers, cookies=s.cookies)
+        trains_req = Request('POST', url,  data=trains_params, headers=headers, cookies=s.cookies)
         prepped = trains_req.prepare()
 
         r = s.send(prepped)
-        print(r.content)
+        trains_res = loads(r.text)
+
+        if trains_res['error']:
+            print("No trains")
+            return
+
+        found_train_ordnum = needed_train(trains_res['value'], train)
+        if found_train_ordnum < 0:
+            print("No places in requested train")
+            print(trains_res['value'])
+            return
+
+        found_train = trains_res['value'][found_train_ordnum]
+        print(trains_res)
+        print(found_train)
+
+        # coaches_params = {"station_id_from": "2200001", "station_id_till": "2218200",
+        #               "date_dep": "12.13.2015", "time_dep": "00:00", "time_dep_till": "",
+        #               "another_ec": "0", "search": ""}
+        #
+        # url = UZ_URI_BASE + LANG + TRAINS_SEARCH
+        #
+        # trains_req = Request('POST', url,  data=trains_params, headers=headers, cookies=s.cookies)
+        # prepped = trains_req.prepare()
+        #
+        # r = s.send(prepped)
+        # print(r.content)
 
 
 if __name__ == "__main__":
+    date = "12.12.2015"
     train = "043К"
     tr_class = "К"
     passengers = []
     passengers.append("Рудь Наталія")
     passengers.append("Уткін Андрій")
-    connect_to_uz(train, tr_class, passengers)
+    connect_to_uz(date, train, tr_class, passengers)
 
 
 
