@@ -18,10 +18,10 @@ def parse_token(body):
 
 
 def needed_train(trains, needed_train):
-    for index, train in enumerate(trains):
+    for train in trains:
         if train['num'] == needed_train:
-            return index
-    return -1
+            return train
+    return None
 
 
 def connect_to_uz(req_date, train, tr_class, passengers):
@@ -73,13 +73,12 @@ def connect_to_uz(req_date, train, tr_class, passengers):
             print("No trains")
             return
 
-        found_train_ordnum = needed_train(trains_res['value'], train)
-        if found_train_ordnum < 0:
+        found_train = needed_train(trains_res['value'], train)
+        if not(found_train):
             print("No places in requested train")
             print(trains_res['value'])
             return
 
-        found_train = trains_res['value'][found_train_ordnum]
         print(trains_res)
         print(found_train)
 
