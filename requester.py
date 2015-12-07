@@ -8,6 +8,8 @@ from json import loads
 UZ_URI_BASE = "http://booking.uz.gov.ua/"
 LANG = "en/"     # "uk/"
 TRAINS_SEARCH = "purchase/search/"
+COACHES_SEARCH = "purchase/coaches/"
+COACH_PLACES_SEARCH = "purchase/coach/"
 
 
 def parse_token(body):
@@ -17,10 +19,17 @@ def parse_token(body):
     return token_decoded
 
 
-def needed_train(trains, needed_train):
+def needed_train(trains, req_train):
     for train in trains:
-        if train['num'] == needed_train:
+        if train['num'] == req_train:
             return train
+    return None
+
+
+def needed_coach_type(coaches, req_coach_type):
+    for coach in coaches:
+        if coach['letter'] == req_coach_type:
+            return coach
     return None
 
 
@@ -55,15 +64,16 @@ def connect_to_uz(req_date, train, tr_class, passengers):
             "Pragma": "no-cache",
             "Cache-Control": "no-cache"
          }
-
+######################################################################################
+## search for trains
         trains_params = {"station_id_from": "2200001", "station_id_till": "2218200",
                       "station_from": "Kyiv", "station_till": "Ivano-Frankivsk",
                       "date_dep": req_date, "time_dep": "00:00", "time_dep_till": "",
                       "another_ec": "0", "search": ""}
 
-        url = UZ_URI_BASE + LANG + TRAINS_SEARCH
+        trains_req_url = UZ_URI_BASE + LANG + TRAINS_SEARCH
 
-        trains_req = Request('POST', url,  data=trains_params, headers=headers, cookies=s.cookies)
+        trains_req = Request('POST', trains_req_url,  data=trains_params, headers=headers, cookies=s.cookies)
         prepped = trains_req.prepare()
 
         r = s.send(prepped)
@@ -79,24 +89,61 @@ def connect_to_uz(req_date, train, tr_class, passengers):
             print(trains_res['value'])
             return
 
+        found_coach_type = needed_coach_type(found_train['types'], tr_class)
+        if not found_coach_type:
+            print("No requested coach type")
+            print(found_train['types'])
+            return
+
         print(trains_res)
         print(found_train)
+        print(found_coach_type)
 
+#######################################################################################
+## search for coaches
+        coaches_params = {"station_id_from": "2200001", "station_id_till": "2218200",
+                          "date_dep": found_train['from']['date'], "train": found_train['num'], "coach_type": tr_class,
+                          "model": found_train['model'], "another_ec": "0", "round_trip":"0"}
+
+        coaches_req_url = UZ_URI_BASE + LANG + COACHES_SEARCH
+
+        coaches_req = Request('POST', coaches_req_url,  data=coaches_params, headers=headers, cookies=s.cookies)
+        prepped = coaches_req.prepare()
+
+        r = s.send(prepped)
+        coaches_res = loads(r.text)
+        if coaches_res['error']:
+            print("No coaches")
+            return
+        if coaches_res.get('value', None) and coaches_res['value'].get('content', None):
+            del coaches_res['value']['content']
+        print(coaches_res['value']['coaches'])
+
+        coaches = coaches_res['value']['coaches']
+        coaches_by_place_num = sorted(coaches, key=lambda coach: coach['places_cnt'], reverse=True)
+        for c in coaches_by_place_num:
+            print(str(c['num']) + ": " + str(c['places_cnt']) + ": " + str(c['coach_class']))  #В Б Д - уменьшение
+
+#######################################################################################
+## search for coach places
         # coaches_params = {"station_id_from": "2200001", "station_id_till": "2218200",
-        #               "date_dep": "12.13.2015", "time_dep": "00:00", "time_dep_till": "",
-        #               "another_ec": "0", "search": ""}
+        #                   "date_dep": found_train['from']['date'], "train": found_train['num'], "coach_type": tr_class,
+        #                   "model": found_train['model'], "another_ec": "0", "round_trip":"0"}
         #
-        # url = UZ_URI_BASE + LANG + TRAINS_SEARCH
+        # coaches_req_url = UZ_URI_BASE + LANG + COACHES_SEARCH
         #
-        # trains_req = Request('POST', url,  data=trains_params, headers=headers, cookies=s.cookies)
-        # prepped = trains_req.prepare()
+        # coaches_req = Request('POST', coaches_req_url,  data=coaches_params, headers=headers, cookies=s.cookies)
+        # prepped = coaches_req.prepare()
         #
         # r = s.send(prepped)
-        # print(r.content)
+        # coaches_res = loads(r.text)
+        # if coaches_res['error']:
+        #     print("No coaches")
+        #     return
 
 
 if __name__ == "__main__":
-    date = "12.12.2015"
+    date = "12.08.2015"
     train = "043К"
     tr_class = "К"
     passengers = []
