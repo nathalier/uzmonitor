@@ -13,6 +13,7 @@ TRAINS_SEARCH = "purchase/search/"
 COACHES_SEARCH = "purchase/coaches/"
 COACH_PLACES_SEARCH = "purchase/coach/"
 BOOK_PLACE = "cart/add/"
+RELEASE_PLACE = "cart/revocation/"
 
 
 class RequestError(Exception):
@@ -39,19 +40,20 @@ def selected(places, num_to_book):
             return [even[0], odd[0]]
 
 
-def places_to_book(places_str, num_to_book):
-    places = map(int, places_str)
+def places_to_book(places, num_to_book, last_place):
     places = sorted(places)
     if num_to_book <= 4:
         block = []
         block_num = 0
         for pl in places:
+            if pl <= last_place:
+                continue
             if len(block) == 0:
                 block.append(pl)
                 block_num = (pl - 1) // 4
             elif (pl - 1) // 4 == block_num:
                 block.append(pl)
-            elif (len(block) < num_to_book):
+            elif len(block) < num_to_book:
                 block = []
             else:
                 m = selected(block, num_to_book)
@@ -64,7 +66,7 @@ def places_to_book(places_str, num_to_book):
     return None
 
 
-def book_place(s, headers, found_train, coach, place, passan):
+def book_place(s, found_train, coach, place, passan):
     print("coach " + str(coach['num']) + " place " + str(place) + " for " + passan)
     (surname, name) = passan.split()
     params = {"code_station_from": found_train['from']['station_id'],
@@ -79,36 +81,49 @@ def book_place(s, headers, found_train, coach, place, passan):
               "places[0][place_num]": str(place),
               "places[0][firstname]": name,
               "places[0][lastname]": surname}
-
     book_place_url = UZ_URI_BASE + LANG + BOOK_PLACE
-
-    book_place_req = Request('POST', book_place_url,  data=params, headers=headers, cookies=s.cookies)
-    prepped = book_place_req.prepare()
-
-    r = s.send(prepped)
+    book_place_req = Request('POST', book_place_url,  data=params, headers=s.headers, cookies=s.cookies)
+    r = exec_request(s, book_place_req, "book_place")
     book_res = loads(r.text)
     if book_res['error']:
-        print("No places")
-        return None
-    return book_res
+        print("place for " + passan + " not booked")
+        # return None
+    return loads(r.text)
 
 
-def book_tickets(s, headers, found_train, coaches, passengers):
-    for coach in coaches:
-        coach_pl_res = find_places_in_coach(s, found_train, coach)
+def release_ticket(s, book_id):
+    params = {"reserve_ids": book_id}
+    release_place_url = UZ_URI_BASE + LANG + RELEASE_PLACE
+    release_place_req = Request('POST', release_place_url,  data=params, headers=s.headers, cookies=s.cookies)
+    r = exec_request(s, release_place_req, "release_ticket")
+    return r
 
-        if len(places) >= len(passengers):
-            pls = places_to_book(places, len(passengers))
-            if pls:
-                res = None
-                for place, passan in zip(pls, passengers):
-                    res = book_place(s, headers, found_train, coach, place, passan)
-                    if not res: break
-                if res: return True
-            else:
-                print("not booked")
-    print(coach_pl_res)
-    return False
+
+def release_all_tickets(s, booking_page):
+    bookings = findall("_reserve_id=\"([0-9]+)\"", booking_page)
+    for b in bookings:
+        release_ticket(s, b)
+
+
+def book_tickets(s, found_train, coach, passengers):
+    last_place = 0
+    while True:
+        pls = places_to_book(coach['places'], len(passengers), last_place)
+        if pls:
+            res = True
+            for place, passan in zip(pls, passengers):
+                bookings = book_place(s, found_train, coach, place, passan)
+                if bookings['error']:
+                    # TODO
+                    release_all_tickets(s, bookings['value']['page'])
+                    res = False
+                    break
+            if res:
+                return True
+            last_place = max(pls)
+        else:
+            print("not booked")
+            return False
 
 
 def book_1(passan):
@@ -273,11 +288,19 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                 coaches_by_place_num = sorted(coaches, key=lambda coach: coach['places_cnt'], reverse=True)
                 reserved = False
                 for coach in coaches_by_place_num:
-                    coach['places'] = find_places_in_coach(s, found_train, coach)
+                    coach['places'] = map(int, find_places_in_coach(s, found_train, coach))
                     print(str(coach['num']) + ": " + str(coach['places_cnt']) + "\\\\ " + str(coach['coach_class']))  #В Б Д - уменьшение
                     print(str(coach['num']) + ": " + str(coach['places']))
-                    # if coach['places_cnt'] < len(passengers)
-                return
+                    if coach['places_cnt'] < len(passengers):
+                        break
+                    if not book_tickets(s, found_train, coach, passengers):
+                        continue
+                    else:
+                        reserved = True
+                        break
+                if not reserved:
+                    continue
+
 
         #######################################################################################
         ## search for coach places
