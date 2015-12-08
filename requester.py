@@ -288,9 +288,10 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                 coaches_by_place_num = sorted(coaches, key=lambda coach: coach['places_cnt'], reverse=True)
                 reserved = False
                 for coach in coaches_by_place_num:
-                    coach['places'] = map(int, find_places_in_coach(s, found_train, coach))
+                    coach_places_str = find_places_in_coach(s, found_train, coach)
+                    coach['places'] = list(map(int, coach_places_str))
                     print(str(coach['num']) + ": " + str(coach['places_cnt']) + "\\\\ " + str(coach['coach_class']))  #В Б Д - уменьшение
-                    print(str(coach['num']) + ": " + str(coach['places']))
+                    print(str(coach['num']) + ": " + str(coach_places_str))
                     if coach['places_cnt'] < len(passengers):
                         break
                     if not book_tickets(s, found_train, coach, passengers):
@@ -299,7 +300,11 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                         reserved = True
                         break
                 if not reserved:
+                    # sleep(3)
                     continue
+                else:
+                    notify(s)
+                    return
 
 
         #######################################################################################
@@ -320,8 +325,8 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
 
 
 if __name__ == "__main__":
-    date = "12.24.2015"
-    train_num = "115О"
+    date = "12.15.2015"
+    train_num = "043К"
     coach_class = "К"
     passengers = list()
     passengers.append("Рудь Наталія")
