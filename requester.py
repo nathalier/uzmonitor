@@ -6,7 +6,7 @@ from jjdecoder import JJDecoder
 from json import loads
 from time import  sleep
 
-REQ_DELAY = 3
+REQ_DELAY = 5
 UZ_URI_BASE = "http://booking.uz.gov.ua/"
 LANG = "en/"     # "uk/"
 TRAINS_SEARCH = "purchase/search/"
@@ -32,12 +32,12 @@ def selected(places, num_to_book):
         else:
             even.append(pl)
     if num_to_book == 2:
-        if len(even) == 0:
-            return None
-        elif len(even) == 2:
+        if len(even) == 2:
             return even
-        else:
+        elif len(even) == 1:
             return [even[0], odd[0]]
+        else:
+            return odd
 
 
 def places_to_book(places, num_to_book, last_place):
@@ -54,7 +54,8 @@ def places_to_book(places, num_to_book, last_place):
             elif (pl - 1) // 4 == block_num:
                 block.append(pl)
             elif len(block) < num_to_book:
-                block = []
+                block = [pl]
+                block_num = (pl - 1) // 4
             else:
                 m = selected(block, num_to_book)
                 if not m:
@@ -246,9 +247,10 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                 return
 
             counter = 0
-            while counter < 500:
+            while counter < 100:
                 counter += 1
-                sleep(REQ_DELAY)
+                if counter > 1: sleep(REQ_DELAY)
+                print(str(counter) + "-th try:")
 
                 ## search for trains
                 trains_res = find_trains_for_date(s, req_date)
@@ -304,7 +306,7 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                     continue
                 else:
                     notify(s)
-                    return
+                    return True
 
 
         #######################################################################################
@@ -322,16 +324,13 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
             print(e)
 
 
-
-
 if __name__ == "__main__":
-    date = "12.15.2015"
+    date = "12.24.2015"
     train_num = "043К"
     coach_class = "К"
     passengers = list()
     passengers.append("Рудь Наталія")
     passengers.append("Уткін Андрій")
-    find_and_buy(date, train_num, coach_class, passengers)
-
-
+    while not find_and_buy(date, train_num, coach_class, passengers):
+        sleep(2)
 
