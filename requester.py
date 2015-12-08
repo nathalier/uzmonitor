@@ -10,6 +10,7 @@ LANG = "en/"     # "uk/"
 TRAINS_SEARCH = "purchase/search/"
 COACHES_SEARCH = "purchase/coaches/"
 COACH_PLACES_SEARCH = "purchase/coach/"
+BOOK_PLACE = "cart/add/"
 
 
 def parse_token(body):
@@ -74,8 +75,33 @@ def places_to_book(places_str, num_to_book):
     return None
 
 
-def book_place(coach, place, passan):
+def book_place(s, headers, found_train, coach, place, passan):
     print("coach " + str(coach['num']) + " place " + str(place) + " for " + passan)
+    (surname, name) = passan.split()
+    params = {"code_station_from": found_train['from']['station_id'],
+              "code_station_to": found_train['till']['station_id'],
+              "train": found_train['num'], "date": found_train['from']['date'],
+              "round_trip": "0", "places[0][ord]": "0", "places[0][stud]": "",
+              "places[0][child]": "", "places[0][transp]": "0", "places[0][reserve]": "0",
+              "places[0][bedding]":"1",
+              "places[0][coach_type_id]": coach['coach_type_id'],
+              "places[0][coach_num]": coach['num'],
+              "places[0][coach_class]": coach['coach_class'],
+              "places[0][place_num]": str(place),
+              "places[0][firstname]": name,
+              "places[0][lastname]": surname}
+
+    book_place_url = UZ_URI_BASE + LANG + BOOK_PLACE
+
+    book_place_req = Request('POST', book_place_url,  data=params, headers=headers, cookies=s.cookies)
+    prepped = book_place_req.prepare()
+
+    r = s.send(prepped)
+    book_res = loads(r.text)
+    if book_res['error']:
+        print("No places")
+        return None
+    return book_res
 
 
 def book_2_kupe(s, headers, found_train, coaches, passengers):
@@ -103,9 +129,11 @@ def book_2_kupe(s, headers, found_train, coaches, passengers):
         if len(places) >= len(passengers):
             pls = places_to_book(places, len(passengers))
             if pls:
+                res = None
                 for place, passan in zip(pls, passengers):
-                    book_place(coach, place, passan)
-                return
+                    res = book_place(s, headers, found_train, coach, place, passan)
+                    if not res: break
+                if res: return
             else:
                 print("not booked")
     print(coach_pl_res)
@@ -114,8 +142,11 @@ def book_2_kupe(s, headers, found_train, coaches, passengers):
 def book_1(passan):
     pass
 
-def notify():
-    pass
+def notify(s):
+    print(s.cookies)
+    cooks = s.cookies.get_dict()
+    print("avascript:void(document.cookie=\"_gv_sessid=" + cooks["_gv_sessid"] +
+          "; HTTPSERVERID=" + cooks["HTTPSERVERID"] + ";\")")
 
 
 def connect_to_uz(req_date, train, tr_class, passengers):
@@ -215,7 +246,7 @@ def connect_to_uz(req_date, train, tr_class, passengers):
             if not book_2_kupe(s, headers, found_train, coaches_by_place_num, passengers):
                 for passan in passengers:
                     book_1(passan)
-        notify()
+        notify(s)
 
 
 
