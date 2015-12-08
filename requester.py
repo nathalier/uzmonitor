@@ -33,6 +33,91 @@ def needed_coach_type(coaches, req_coach_type):
     return None
 
 
+def selected(places, num_to_book):
+    odd, even = [], []
+    for pl in places:
+        if pl % 2 == 0:
+            odd.append(pl)
+        else:
+            even.append(pl)
+    if num_to_book == 2:
+        if len(even) == 0:
+            return None
+        elif len(even) == 2:
+            return even
+        else:
+            return [even[0], odd[0]]
+
+
+def places_to_book(places_str, num_to_book):
+    places = map(int, places_str)
+    places = sorted(places)
+    if num_to_book <= 4:
+        block = []
+        block_num = 0
+        for pl in places:
+            if len(block) == 0:
+                block.append(pl)
+                block_num = (pl - 1) // 4
+            elif (pl - 1) // 4 == block_num:
+                block.append(pl)
+            elif (len(block) < num_to_book):
+                block = []
+            else:
+                m = selected(block, num_to_book)
+                if not m:
+                    block = []
+                else:
+                    return m
+        if len(block) >= num_to_book:
+            return selected(block, num_to_book)
+    return None
+
+
+def book_place(coach, place, passan):
+    print("coach " + str(coach['num']) + " place " + str(place) + " for " + passan)
+
+
+def book_2_kupe(s, headers, found_train, coaches, passengers):
+    for coach in coaches:
+        coach_params = {"station_id_from": found_train['from']['station_id'],
+                        "station_id_till": found_train['till']['station_id'],
+                        "train": found_train['num'],
+                        "date_dep": found_train['from']['date'], "change_scheme":"0",
+                        "coach_type_id": coach['coach_type_id'],
+                        "coach_num": coach['num'],
+                        "coach_class": coach['coach_class']}
+
+        coach_pl_req_url = UZ_URI_BASE + LANG + COACH_PLACES_SEARCH
+
+        coach_places_req = Request('POST', coach_pl_req_url,  data=coach_params, headers=headers, cookies=s.cookies)
+        prepped = coach_places_req.prepare()
+
+        r = s.send(prepped)
+        coach_pl_res = loads(r.text)
+        if coach_pl_res['error']:
+            print("No places")
+            continue
+        places = coach_pl_res['value']['places'][coach['prices'].popitem()[0]]
+        print(str(coach['num']) + ": " + str(places))
+        if len(places) >= len(passengers):
+            pls = places_to_book(places, len(passengers))
+            if pls:
+                for place, passan in zip(pls, passengers):
+                    book_place(coach, place, passan)
+                return
+            else:
+                print("not booked")
+    print(coach_pl_res)
+
+
+def book_1(passan):
+    pass
+
+def notify():
+    pass
+
+
 def connect_to_uz(req_date, train, tr_class, passengers):
     with Session() as s:
         r = s.get(UZ_URI_BASE + LANG)
@@ -102,7 +187,7 @@ def connect_to_uz(req_date, train, tr_class, passengers):
 #######################################################################################
 ## search for coaches
         coaches_params = {"station_id_from": "2200001", "station_id_till": "2218200",
-                          "date_dep": found_train['from']['date'], "train": found_train['num'], "coach_type": tr_class,
+                          "date_dep": found_train['from']['date'], "train": train, "coach_type": tr_class,
                           "model": found_train['model'], "another_ec": "0", "round_trip":"0"}
 
         coaches_req_url = UZ_URI_BASE + LANG + COACHES_SEARCH
@@ -126,20 +211,12 @@ def connect_to_uz(req_date, train, tr_class, passengers):
 
 #######################################################################################
 ## search for coach places
-        # coaches_params = {"station_id_from": "2200001", "station_id_till": "2218200",
-        #                   "date_dep": found_train['from']['date'], "train": found_train['num'], "coach_type": tr_class,
-        #                   "model": found_train['model'], "another_ec": "0", "round_trip":"0"}
-        #
-        # coaches_req_url = UZ_URI_BASE + LANG + COACHES_SEARCH
-        #
-        # coaches_req = Request('POST', coaches_req_url,  data=coaches_params, headers=headers, cookies=s.cookies)
-        # prepped = coaches_req.prepare()
-        #
-        # r = s.send(prepped)
-        # coaches_res = loads(r.text)
-        # if coaches_res['error']:
-        #     print("No coaches")
-        #     return
+        if coaches_by_place_num[0]['places_cnt'] > len(passengers):
+            if not book_2_kupe(s, headers, found_train, coaches_by_place_num, passengers):
+                for passan in passengers:
+                    book_1(passan)
+        notify()
+
 
 
 if __name__ == "__main__":
