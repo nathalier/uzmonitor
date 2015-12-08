@@ -4,6 +4,7 @@ from requests import Request, Response, Session
 from re import findall
 from jjdecoder import JJDecoder
 from json import loads
+from time import  sleep
 
 UZ_URI_BASE = "http://booking.uz.gov.ua/"
 LANG = "en/"     # "uk/"
@@ -192,66 +193,78 @@ def connect_to_uz(req_date, train, tr_class, passengers):
         trains_req = Request('POST', trains_req_url,  data=trains_params, headers=headers, cookies=s.cookies)
         prepped = trains_req.prepare()
 
-        r = s.send(prepped)
-        trains_res = loads(r.text)
+        counter = 0
+        while counter < 500:
+            counter += 1
+            r = s.send(prepped)
+            trains_res = loads(r.text)
 
-        if trains_res['error']:
-            print("No trains")
-            return
+            if trains_res['error']:
+                print(str(counter) + ": No trains")
+                sleep(1)
+                continue
+                # return
 
-        found_train = needed_train(trains_res['value'], train)
-        if not(found_train):
-            print("No places in requested train")
-            print(trains_res['value'])
-            return
+            found_train = needed_train(trains_res['value'], train)
+            if not(found_train):
+                print(str(counter) + ": No places in requested train")
+                print(trains_res['value'])
+                sleep(1)
+                continue
+                # return
 
-        found_coach_type = needed_coach_type(found_train['types'], tr_class)
-        if not found_coach_type:
-            print("No requested coach type")
-            print(found_train['types'])
-            return
+            found_coach_type = needed_coach_type(found_train['types'], tr_class)
+            if not found_coach_type:
+                print(str(counter) + ": No requested coach type")
+                print(found_train['types'])
+                sleep(1)
+                continue
+                # return
 
-        print(trains_res)
-        print(found_train)
-        print(found_coach_type)
+            print(trains_res)
+            print(found_train)
+            print(found_coach_type)
 
-#######################################################################################
-## search for coaches
-        coaches_params = {"station_id_from": "2200001", "station_id_till": "2218200",
-                          "date_dep": found_train['from']['date'], "train": train, "coach_type": tr_class,
-                          "model": found_train['model'], "another_ec": "0", "round_trip":"0"}
+    #######################################################################################
+    ## search for coaches
+            coaches_params = {"station_id_from": "2200001", "station_id_till": "2218200",
+                              "date_dep": found_train['from']['date'], "train": train, "coach_type": tr_class,
+                              "model": found_train['model'], "another_ec": "0", "round_trip":"0"}
 
-        coaches_req_url = UZ_URI_BASE + LANG + COACHES_SEARCH
+            coaches_req_url = UZ_URI_BASE + LANG + COACHES_SEARCH
 
-        coaches_req = Request('POST', coaches_req_url,  data=coaches_params, headers=headers, cookies=s.cookies)
-        prepped = coaches_req.prepare()
+            coaches_req = Request('POST', coaches_req_url,  data=coaches_params, headers=headers, cookies=s.cookies)
+            prepped = coaches_req.prepare()
 
-        r = s.send(prepped)
-        coaches_res = loads(r.text)
-        if coaches_res['error']:
-            print("No coaches")
-            return
-        if coaches_res.get('value', None) and coaches_res['value'].get('content', None):
-            del coaches_res['value']['content']
-        print(coaches_res['value']['coaches'])
+            r = s.send(prepped)
+            coaches_res = loads(r.text)
+            if coaches_res['error']:
+                print("No coaches")
+                return
+            if coaches_res.get('value', None) and coaches_res['value'].get('content', None):
+                del coaches_res['value']['content']
+            print(coaches_res['value']['coaches'])
 
-        coaches = coaches_res['value']['coaches']
-        coaches_by_place_num = sorted(coaches, key=lambda coach: coach['places_cnt'], reverse=True)
-        for c in coaches_by_place_num:
-            print(str(c['num']) + ": " + str(c['places_cnt']) + ": " + str(c['coach_class']))  #В Б Д - уменьшение
+            coaches = coaches_res['value']['coaches']
+            coaches_by_place_num = sorted(coaches, key=lambda coach: coach['places_cnt'], reverse=True)
+            for c in coaches_by_place_num:
+                print(str(c['num']) + ": " + str(c['places_cnt']) + ": " + str(c['coach_class']))  #В Б Д - уменьшение
 
-#######################################################################################
-## search for coach places
-        if coaches_by_place_num[0]['places_cnt'] > len(passengers):
-            if not book_2_kupe(s, headers, found_train, coaches_by_place_num, passengers):
-                for passan in passengers:
-                    book_1(passan)
-        notify(s)
+    #######################################################################################
+    ## search for coach places
+            if coaches_by_place_num[0]['places_cnt'] > len(passengers):
+                if not book_2_kupe(s, headers, found_train, coaches_by_place_num, passengers):
+                    sleep(1)
+                    continue
+            else:
+                notify(s)
+                return
+
 
 
 
 if __name__ == "__main__":
-    date = "12.08.2015"
+    date = "12.12.2015"
     train = "043К"
     tr_class = "К"
     passengers = []
