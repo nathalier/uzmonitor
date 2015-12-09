@@ -100,10 +100,19 @@ def release_ticket(s, book_id):
     return r
 
 
-def release_all_tickets(s, booking_page):
-    bookings = findall("_reserve_id=\"([0-9]+)\"", booking_page)
-    for b in bookings:
-        release_ticket(s, b)
+def retrieve_bookings_id(booking_page):
+    return findall("_reserve_id=\"([0-9]+)\"", booking_page)
+
+def reserve_places(s, found_train, coach, passengers, pls):
+    for place, passan in zip(pls, passengers):
+        bookings = book_place(s, found_train, coach, place, passan)
+        if bookings['error']:
+            # TODO
+            for b in retrieve_bookings_id(bookings['value']['page']):
+                release_ticket(s, b)
+            return None
+    booking_ids = retrieve_bookings_id(bookings['value']['page'])
+    return booking_ids
 
 
 def book_tickets(s, found_train, coach, passengers):
@@ -111,24 +120,20 @@ def book_tickets(s, found_train, coach, passengers):
     while True:
         pls = places_to_book(coach['places'], len(passengers), last_place)
         if pls:
-            res = True
-            for place, passan in zip(pls, passengers):
-                bookings = book_place(s, found_train, coach, place, passan)
-                if bookings['error']:
-                    # TODO
-                    release_all_tickets(s, bookings['value']['page'])
-                    res = False
-                    break
-            if res:
-                return True
-            last_place = max(pls)
+            booking_ids = reserve_places(s, found_train, coach, passengers, pls)
+            if booking_ids:
+                return (pls, booking_ids)
+            else:
+                last_place = max(pls)
         else:
             print("not booked")
-            return False
+            return (None, None)
 
-
-def book_1(passan):
-    pass
+def rebook_tickets(s, found_train, coach, passengers, pls, booking_ids):
+    for b_id in booking_ids:
+        release_ticket(s, b_id)
+    res = reserve_places(s, found_train, coach, passengers, pls)
+    return pls, res
 
 def notify(s):
     print(s.cookies)
@@ -296,38 +301,34 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                     print(str(coach['num']) + ": " + str(coach_places_str))
                     if coach['places_cnt'] < len(passengers):
                         break
-                    if not book_tickets(s, found_train, coach, passengers):
+                    booked_places, booking_ids = book_tickets(s, found_train, coach, passengers)
+                    if not booking_ids:
                         continue
                     else:
                         reserved = True
                         break
                 if not reserved:
-                    # sleep(3)
                     continue
                 else:
-                    notify(s)
-                    return True
-
-
-        #######################################################################################
-        ## search for coach places
-                # if coaches_by_place_num[0]['places_cnt'] > len(passengers):
-                #     if not book_tickets(s, headers, found_train, coaches_by_place_num, passengers):
-                #         sleep(10)
-                #         continue
-                #     else:
-                #         notify(s)
-                #         return
-
+                    while reserved:
+                        notify(s)
+                        sleep(599)
+                        booked_places, booking_ids = rebook_tickets(s, found_train, coach, passengers,
+                                                                    booked_places, booking_ids)
+                        reserved = False if not booking_ids else True
+                        if reserved:
+                            print("rebooked places: " + str(booked_places) + " in coach " + str(coach['num']))
+                        else:
+                            print("rebooking places was unsuccessful")
         except RequestError as e:
             print("Ooops! Bad Request.. Try again")
             print(e)
 
 
 if __name__ == "__main__":
-    date = "12.24.2015"
+    date = "12.12.2015"
     train_num = "043К"
-    coach_class = "К"
+    coach_class = "П"
     passengers = list()
     passengers.append("Рудь Наталія")
     passengers.append("Уткін Андрій")
