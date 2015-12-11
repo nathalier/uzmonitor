@@ -1,12 +1,15 @@
 __author__ = 'Nathalie'
 
-from requests import Request, Response, Session
+from requests import Request, Session, exceptions
 from re import findall
 from jjdecoder import JJDecoder
 from json import loads
-from time import  sleep
+from time import sleep, strftime
 
+SMALL_DELAY = 2
 REQ_DELAY = 5
+CONN_ERROR_DELAY = 60
+REBOOK_DELAY = 598
 UZ_URI_BASE = "http://booking.uz.gov.ua/"
 LANG = "en/"     # "uk/"
 TRAINS_SEARCH = "purchase/search/"
@@ -154,7 +157,9 @@ def connect_to_uz(s):
     if r.status_code == 302:
         r = s.get(UZ_URI_BASE + LANG)
     if r.status_code != 200:
-        return False
+        if r.status_code == 503:
+            raise ConnectionError("connect_to_uz" + ": status:" + str(r.status_code) + ": " + r.reason)
+        raise RequestError("connect_to_uz" + ": status:" + str(r.status_code) + ": " + r.reason)
     gv_token = parse_token(r.text)
 
     s.headers = {
@@ -252,10 +257,9 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                 return
 
             counter = 0
-            while counter < 100:
+            while counter < 99:
                 counter += 1
                 if counter > 1: sleep(REQ_DELAY)
-                print(str(counter) + "-th try:")
 
                 ## search for trains
                 trains_res = find_trains_for_date(s, req_date)
@@ -312,26 +316,34 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                 else:
                     while reserved:
                         notify(s)
-                        sleep(599)
+                        sleep(REBOOK_DELAY)
                         booked_places, booking_ids = rebook_tickets(s, found_train, coach, passengers,
                                                                     booked_places, booking_ids)
                         reserved = False if not booking_ids else True
                         if reserved:
                             print("rebooked places: " + str(booked_places) + " in coach " + str(coach['num']))
                         else:
-                            print("rebooking places was unsuccessful")
+                            print("places rebooking was unsuccessful")
         except RequestError as e:
             print("Ooops! Bad Request.. Try again")
             print(e)
+        except (ConnectionError, exceptions.ConnectionError) as e:
+            print(e)
+            sleep(CONN_ERROR_DELAY)
+            return False
 
 
 if __name__ == "__main__":
-    date = "12.12.2015"
+    date = "12.24.2015"
     train_num = "043К"
-    coach_class = "П"
+    coach_class = "К"
     passengers = list()
     passengers.append("Рудь Наталія")
     passengers.append("Уткін Андрій")
+    counter = 1
+    print(str(strftime('%X %x %Z')) + ": cycle #" + str(counter))
     while not find_and_buy(date, train_num, coach_class, passengers):
-        sleep(2)
+        counter += 1
+        sleep(SMALL_DELAY)
+        print(str(strftime('%X %x %Z')) + ": cycle #" + str(counter))
 
