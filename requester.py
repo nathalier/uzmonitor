@@ -10,6 +10,9 @@ SMALL_DELAY = 2
 REQ_DELAY = 5
 CONN_ERROR_DELAY = 60
 REBOOK_DELAY = 598
+PLATS_CTYPE = "П"
+KUPE_CTYPE = "К"
+LUX_CTYPE = "Л"
 UZ_URI_BASE = "http://booking.uz.gov.ua/"
 LANG = "en/"     # "uk/"
 TRAINS_SEARCH = "purchase/search/"
@@ -27,7 +30,9 @@ class RequestError(Exception):
         return repr(self.value)
 
 
-def selected(places, num_to_book):
+def selected(places, coach_class, num_to_book):
+    if coach_class == PLATS_CTYPE and max(places) > 32:
+        return None
     odd, even = [], []
     for pl in places:
         if pl % 2 == 0:
@@ -43,9 +48,13 @@ def selected(places, num_to_book):
             return odd
 
 
-def places_to_book(places, num_to_book, last_place):
+def places_to_book(places, coach_class, num_to_book, last_place):
     places = sorted(places)
-    if num_to_book <= 4:
+    if coach_class == LUX_CTYPE:
+        box_size = 2
+    else:
+        box_size = 4
+    if num_to_book <= box_size:
         block = []
         block_num = 0
         for pl in places:
@@ -53,14 +62,14 @@ def places_to_book(places, num_to_book, last_place):
                 continue
             if len(block) == 0:
                 block.append(pl)
-                block_num = (pl - 1) // 4
-            elif (pl - 1) // 4 == block_num:
+                block_num = (pl - 1) // box_size
+            elif (pl - 1) // box_size == block_num:
                 block.append(pl)
             elif len(block) < num_to_book:
                 block = [pl]
-                block_num = (pl - 1) // 4
+                block_num = (pl - 1) // box_size
             else:
-                m = selected(block, num_to_book)
+                m = selected(block, coach_class, num_to_book)
                 if not m:
                     block = []
                 else:
@@ -121,7 +130,9 @@ def reserve_places(s, found_train, coach, passengers, pls):
 def book_tickets(s, found_train, coach, passengers):
     last_place = 0
     while True:
-        pls = places_to_book(coach['places'], len(passengers), last_place)
+        pls = places_to_book(coach['places'], coach['letter'], len(passengers), last_place)
+        print(pls)
+        # sleep(CONN_ERROR_DELAY)
         if pls:
             booking_ids = reserve_places(s, found_train, coach, passengers, pls)
             if booking_ids:
@@ -133,6 +144,7 @@ def book_tickets(s, found_train, coach, passengers):
             return (None, None)
 
 def rebook_tickets(s, found_train, coach, passengers, pls, booking_ids):
+    # TODO rebook-reserve sequentually for each passenger
     for b_id in booking_ids:
         release_ticket(s, b_id)
     res = reserve_places(s, found_train, coach, passengers, pls)
@@ -214,7 +226,7 @@ def find_req_train(trains, req_train):
 
 def find_req_coach_type(coaches, req_coach_type):
     for coach in coaches:
-        if coach['letter'] == req_coach_type:
+        if coach['letter'] in req_coach_type:
             return coach
     return None
 
@@ -285,17 +297,23 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
                 # print(found_train['types'])
 
                 ## search for coaches
-                coaches_res = find_train_coaches(s, found_train, req_coach_class)
-
-                if coaches_res['error'] or \
-                        not (coaches_res.get('value', False) and coaches_res['value'].get('coaches', False)):
-                    print(str(counter) + ": No coaches")
-                    continue
+                coaches = list()
+                for curr_coach_class in req_coach_class:
+                    coaches_res = find_train_coaches(s, found_train, curr_coach_class)
+                    if coaches_res['error'] or \
+                            not (coaches_res.get('value', False) and coaches_res['value'].get('coaches', False)):
+                        continue
+                    for c in coaches_res['value']['coaches']:
+                        c['letter'] = curr_coach_class
+                    coaches.extend(coaches_res['value']['coaches'])
                 # if coaches_res.get('value', None) and coaches_res['value'].get('content', None):
                 #     del coaches_res['value']['content']
                 # print(coaches_res['value']['coaches'])
 
-                coaches = coaches_res['value']['coaches']
+                if len(coaches) == 0:
+                    print(str(counter) + ": No coaches")
+                    continue
+
                 coaches_by_place_num = sorted(coaches, key=lambda coach: coach['places_cnt'], reverse=True)
                 reserved = False
                 for coach in coaches_by_place_num:
@@ -334,9 +352,9 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
 
 
 if __name__ == "__main__":
-    date = "12.24.2015"
+    date = "01.19.2016"  # "12.18.2015"
     train_num = "043К"
-    coach_class = "К"
+    coach_class = [KUPE_CTYPE, PLATS_CTYPE, LUX_CTYPE]
     passengers = list()
     passengers.append("Рудь Наталія")
     passengers.append("Уткін Андрій")
