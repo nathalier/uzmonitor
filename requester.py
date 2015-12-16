@@ -30,7 +30,7 @@ class RequestError(Exception):
         return repr(self.value)
 
 
-def selected(places, coach_class, num_to_book):
+def selected_places(places, coach_class, num_to_book):
     if coach_class == PLATS_CTYPE and max(places) > 32:
         return None
     odd, even = [], []
@@ -39,6 +39,13 @@ def selected(places, coach_class, num_to_book):
             odd.append(pl)
         else:
             even.append(pl)
+
+    if num_to_book == 1:
+        if len(even) > 0:
+            return even[0]
+        else:
+            return odd[0]
+
     if num_to_book == 2:
         if len(even) == 2:
             return even
@@ -69,13 +76,13 @@ def places_to_book(places, coach_class, num_to_book, last_place):
                 block = [pl]
                 block_num = (pl - 1) // box_size
             else:
-                m= selected(block, coach_class, num_to_book)
+                m = selected_places(block, coach_class, num_to_book)
                 if not m:
                     block = []
                 else:
                     return m
         if len(block) >= num_to_book:
-            return selected(block, coach_class, num_to_book)
+            return selected_places(block, coach_class, num_to_book)
     return None
 
 
@@ -118,8 +125,8 @@ def retrieve_bookings_id(booking_page):
 def reserve_places(s, found_train, coach, passengers, pls):
     for place, passan in zip(pls, passengers):
         bookings = book_place(s, found_train, coach, place, passan)
-        if bookings['error']:
-            # TODO
+        if bookings['error'] or \
+                not (bookings.get('value', False) and bookings['value'].get('page', False)):
             for b in retrieve_bookings_id(bookings['value']['page']):
                 release_ticket(s, b)
             return None
@@ -352,7 +359,7 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
 
 
 if __name__ == "__main__":
-    date = "12.18.2015"
+    date = "12.24.2015"
     train_num = "043К"
     coach_class = [KUPE_CTYPE, PLATS_CTYPE, LUX_CTYPE]
     passengers = list()
