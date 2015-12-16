@@ -7,7 +7,7 @@ from json import loads
 from time import sleep, strftime
 
 SMALL_DELAY = 2
-REQ_DELAY = 5
+REQ_DELAY = 9
 CONN_ERROR_DELAY = 60
 REBOOK_DELAY = 598
 PLATS_CTYPE = "П"
@@ -69,13 +69,13 @@ def places_to_book(places, coach_class, num_to_book, last_place):
                 block = [pl]
                 block_num = (pl - 1) // box_size
             else:
-                m = selected(block, coach_class, num_to_book)
+                m= selected(block, coach_class, num_to_book)
                 if not m:
                     block = []
                 else:
                     return m
         if len(block) >= num_to_book:
-            return selected(block, num_to_book)
+            return selected(block, coach_class, num_to_book)
     return None
 
 
@@ -352,7 +352,7 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
 
 
 if __name__ == "__main__":
-    date = "01.19.2016"  # "12.18.2015"
+    date = "12.18.2015"
     train_num = "043К"
     coach_class = [KUPE_CTYPE, PLATS_CTYPE, LUX_CTYPE]
     passengers = list()
