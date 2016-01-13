@@ -1,5 +1,7 @@
 __author__ = 'Nathalie'
 
+from sys import argv
+
 from requests import Request, Session, exceptions
 from re import findall
 from jjdecoder import JJDecoder
@@ -10,6 +12,7 @@ SMALL_DELAY = 2
 REQ_DELAY = 9
 CONN_ERROR_DELAY = 60
 REBOOK_DELAY = 598
+DATAFILE = r'.\requestdata.txt'
 PLATS_CTYPE = "П"
 KUPE_CTYPE = "К"
 LUX_CTYPE = "Л"
@@ -42,9 +45,9 @@ def selected_places(places, coach_class, num_to_book):
 
     if num_to_book == 1:
         if len(even) > 0:
-            return even[0]
+            return even[:0]
         else:
-            return odd[0]
+            return odd[:0]
 
     if num_to_book == 2:
         if len(even) == 2:
@@ -359,12 +362,16 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
 
 
 if __name__ == "__main__":
-    date = "12.24.2015"
-    train_num = "043К"
-    coach_class = [KUPE_CTYPE, PLATS_CTYPE, LUX_CTYPE]
-    passengers = list()
-    passengers.append("Рудь Наталія")
-    passengers.append("Уткін Андрій")
+    if len(argv) > 1:
+        req_file = argv[1]
+    else:
+        req_file = DATAFILE
+    with open(req_file, encoding='utf-8') as f:
+        data = f.read().split('\n')
+    date = data[0]  # "12.24.2015"
+    train_num = data[1]   #"143К"
+    coach_class = data[2].split(' ') # [KUPE_CTYPE, PLATS_CTYPE, LUX_CTYPE]
+    passengers = data[3].split(', ')
     counter = 1
     print(str(strftime('%X %x %Z')) + ": cycle #" + str(counter))
     while not find_and_buy(date, train_num, coach_class, passengers):
