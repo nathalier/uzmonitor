@@ -48,23 +48,23 @@ def selected_places(places, coach_class, num_to_book):
 
     if num_to_book == 1:
         if len(even) > 0:
-            return even[0]
+            return even[:1]
         else:
-            return odd[0]
+            return odd[:1]
 
     if num_to_book == 2:
         if len(even) == 2:
             return even
         elif len(even) == 1:
-            return even[0].append(odd[0])
+            return even[:1] + odd[:1]
         else:
             return odd
 
     if num_to_book == 3:
         if len(even) == 2:
-            return even.append(odd[0])
+            return even + odd[:1]
         else:
-            return odd.append(even[0])
+            return odd + even[:1]
 
 
 def places_to_book(places, coach_class, num_to_book, last_place, any_places):
