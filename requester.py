@@ -36,6 +36,9 @@ class RequestError(Exception):
 def selected_places(places, coach_class, num_to_book):
     if coach_class == PLATS_CTYPE and max(places) > 32:
         return None
+    if num_to_book == len(places):
+        return places
+
     odd, even = [], []
     for pl in places:
         if pl % 2 == 0:
@@ -45,21 +48,39 @@ def selected_places(places, coach_class, num_to_book):
 
     if num_to_book == 1:
         if len(even) > 0:
-            return even[:0]
+            return even[0]
         else:
-            return odd[:0]
+            return odd[0]
 
     if num_to_book == 2:
         if len(even) == 2:
             return even
         elif len(even) == 1:
-            return [even[0], odd[0]]
+            return even[0].append(odd[0])
         else:
             return odd
 
+    if num_to_book == 3:
+        if len(even) == 2:
+            return even.append(odd[0])
+        else:
+            return odd.append(even[0])
 
-def places_to_book(places, coach_class, num_to_book, last_place):
+
+def places_to_book(places, coach_class, num_to_book, last_place, any_places):
     places = sorted(places)
+    if any_places:
+        block = []
+        block_num = 0
+        for pl in places:
+            if pl <= last_place:
+                continue
+            if len(block) == num_to_book:
+                return block
+            else:
+                block.append(pl)
+        if len(block) < num_to_book:
+            return None
     if coach_class == LUX_CTYPE:
         box_size = 2
     else:
@@ -137,10 +158,10 @@ def reserve_places(s, found_train, coach, passengers, pls):
     return booking_ids
 
 
-def book_tickets(s, found_train, coach, passengers):
+def book_tickets(s, found_train, coach, passengers, any_places):
     last_place = 0
     while True:
-        pls = places_to_book(coach['places'], coach['letter'], len(passengers), last_place)
+        pls = places_to_book(coach['places'], coach['letter'], len(passengers), last_place, any_places)
         print(pls)
         # sleep(CONN_ERROR_DELAY)
         if pls:
@@ -149,6 +170,7 @@ def book_tickets(s, found_train, coach, passengers):
                 return (pls, booking_ids)
             else:
                 last_place = max(pls)
+
         else:
             print("not booked")
             return (None, None)
@@ -267,10 +289,12 @@ def find_places_in_coach(s, found_train, coach):
     coach_places_res = loads(r.text)
     if coach_places_res['error']:
         return []
-    return coach_places_res['value']['places'][coach['prices'].popitem()[0]]
+    from copy import deepcopy
+    coach_type = deepcopy(coach['prices'])
+    return coach_places_res['value']['places'][coach_type.popitem()[0]]
 
 
-def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
+def find_and_buy(req_date, req_train_num, req_coach_class, passengers, any_places):
     with Session() as s:
         try:
             res = connect_to_uz(s)
@@ -326,19 +350,22 @@ def find_and_buy(req_date, req_train_num, req_coach_class, passengers):
 
                 coaches_by_place_num = sorted(coaches, key=lambda coach: coach['places_cnt'], reverse=True)
                 reserved = False
-                for coach in coaches_by_place_num:
-                    coach_places_str = find_places_in_coach(s, found_train, coach)
-                    coach['places'] = list(map(int, coach_places_str))
-                    print(str(coach['num']) + ": " + str(coach['places_cnt']) + "\\\\ " + str(coach['coach_class']))  #В Б Д - уменьшение
-                    print(str(coach['num']) + ": " + str(coach_places_str))
-                    if coach['places_cnt'] < len(passengers):
-                        break
-                    booked_places, booking_ids = book_tickets(s, found_train, coach, passengers)
-                    if not booking_ids:
-                        continue
-                    else:
-                        reserved = True
-                        break
+                variants = [False, True] if any_places else [False]
+                for variant in variants:
+                    if reserved: break
+                    for coach in coaches_by_place_num:
+                        coach_places_str = find_places_in_coach(s, found_train, coach)
+                        coach['places'] = list(map(int, coach_places_str))
+                        print(str(coach['num']) + ": " + str(coach['places_cnt']) + "\\\\ " + str(coach['coach_class']))  #В Б Д - уменьшение
+                        print(str(coach['num']) + ": " + str(coach_places_str))
+                        if coach['places_cnt'] < len(passengers):
+                            break
+                        booked_places, booking_ids = book_tickets(s, found_train, coach, passengers, any_places=variant)
+                        if not booking_ids:
+                            continue
+                        else:
+                            reserved = True
+                            break
                 if not reserved:
                     continue
                 else:
@@ -372,9 +399,10 @@ if __name__ == "__main__":
     train_num = data[1]   #"143К"
     coach_class = data[2].split(' ') # [KUPE_CTYPE, PLATS_CTYPE, LUX_CTYPE]
     passengers = data[3].split(', ')
+    any_places = True if int(data[4]) > 0 else False
     counter = 1
     print(str(strftime('%X %x %Z')) + ": cycle #" + str(counter))
-    while not find_and_buy(date, train_num, coach_class, passengers):
+    while not find_and_buy(date, train_num, coach_class, passengers, any_places):
         counter += 1
         sleep(SMALL_DELAY)
         print(str(strftime('%X %x %Z')) + ": cycle #" + str(counter))
